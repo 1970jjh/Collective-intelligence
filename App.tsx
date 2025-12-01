@@ -69,11 +69,46 @@ const INITIAL_LOGS: AccessLog[] = [
   }
 ];
 
+// --- LOCAL STORAGE KEYS ---
+const STORAGE_KEYS = {
+  GAMES: 'collective_intelligence_games',
+  MEMBERS: 'collective_intelligence_members',
+  LOGS: 'collective_intelligence_logs',
+};
+
+// --- HELPER: Load from localStorage with fallback ---
+const loadFromStorage = <T,>(key: string, fallback: T): T => {
+  try {
+    const stored = localStorage.getItem(key);
+    if (stored) {
+      return JSON.parse(stored);
+    }
+  } catch (e) {
+    console.error(`Failed to load ${key} from localStorage:`, e);
+  }
+  return fallback;
+};
+
+// --- HELPER: Save to localStorage ---
+const saveToStorage = <T,>(key: string, data: T): void => {
+  try {
+    localStorage.setItem(key, JSON.stringify(data));
+  } catch (e) {
+    console.error(`Failed to save ${key} to localStorage:`, e);
+  }
+};
+
 const App: React.FC = () => {
-  // Global Data State
-  const [games, setGames] = useState<GameState[]>(INITIAL_GAMES);
-  const [members, setMembers] = useState<Member[]>(INITIAL_MEMBERS);
-  const [logs, setLogs] = useState<AccessLog[]>(INITIAL_LOGS);
+  // Global Data State - Initialize from localStorage or fallback to initial data
+  const [games, setGames] = useState<GameState[]>(() =>
+    loadFromStorage(STORAGE_KEYS.GAMES, INITIAL_GAMES)
+  );
+  const [members, setMembers] = useState<Member[]>(() =>
+    loadFromStorage(STORAGE_KEYS.MEMBERS, INITIAL_MEMBERS)
+  );
+  const [logs, setLogs] = useState<AccessLog[]>(() =>
+    loadFromStorage(STORAGE_KEYS.LOGS, INITIAL_LOGS)
+  );
 
   // Theme State
   const [theme, setTheme] = useState<'dark' | 'light'>('dark');
@@ -126,6 +161,64 @@ const App: React.FC = () => {
         document.documentElement.classList.remove('dark');
     }
   }, [theme]);
+
+  // --- SYNC STATE TO LOCALSTORAGE ---
+  useEffect(() => {
+    saveToStorage(STORAGE_KEYS.GAMES, games);
+  }, [games]);
+
+  useEffect(() => {
+    saveToStorage(STORAGE_KEYS.MEMBERS, members);
+  }, [members]);
+
+  useEffect(() => {
+    saveToStorage(STORAGE_KEYS.LOGS, logs);
+  }, [logs]);
+
+  // --- CROSS-TAB SYNC: Listen for storage changes from other tabs ---
+  useEffect(() => {
+    const handleStorageChange = (e: StorageEvent) => {
+      if (e.key === STORAGE_KEYS.GAMES && e.newValue) {
+        try {
+          const newGames = JSON.parse(e.newValue);
+          setGames(newGames);
+        } catch (err) {
+          console.error('Failed to parse games from storage event:', err);
+        }
+      }
+      if (e.key === STORAGE_KEYS.MEMBERS && e.newValue) {
+        try {
+          const newMembers = JSON.parse(e.newValue);
+          setMembers(newMembers);
+        } catch (err) {
+          console.error('Failed to parse members from storage event:', err);
+        }
+      }
+      if (e.key === STORAGE_KEYS.LOGS && e.newValue) {
+        try {
+          const newLogs = JSON.parse(e.newValue);
+          setLogs(newLogs);
+        } catch (err) {
+          console.error('Failed to parse logs from storage event:', err);
+        }
+      }
+    };
+
+    window.addEventListener('storage', handleStorageChange);
+    return () => window.removeEventListener('storage', handleStorageChange);
+  }, []);
+
+  // --- PERIODIC SYNC: Refresh from localStorage every 2 seconds for real-time updates ---
+  useEffect(() => {
+    const syncInterval = setInterval(() => {
+      const storedGames = loadFromStorage(STORAGE_KEYS.GAMES, null);
+      if (storedGames && JSON.stringify(storedGames) !== JSON.stringify(games)) {
+        setGames(storedGames);
+      }
+    }, 2000);
+
+    return () => clearInterval(syncInterval);
+  }, [games]);
 
   // --- SECURITY EFFECT: Kick out deleted/suspended members ---
   useEffect(() => {
