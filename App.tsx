@@ -145,6 +145,9 @@ const App: React.FC = () => {
   const lastLocalChangeTime = useRef<number>(0);
   const LOCAL_CHANGE_DEBOUNCE = 2000; // 2 seconds debounce
 
+  // Track if we've received initial Firebase data (prevent overwriting Firebase with mock data)
+  const hasReceivedInitialData = useRef(false);
+
   // Theme State
   const [theme, setTheme] = useState<'dark' | 'light'>('dark');
 
@@ -205,6 +208,9 @@ const App: React.FC = () => {
 
     // Subscribe to games
     const unsubscribeGames = subscribeToGames((newGames) => {
+      // Mark that we've received initial data from Firebase
+      hasReceivedInitialData.current = true;
+
       // Skip if there was a recent local change (prevent race condition)
       const timeSinceLocalChange = Date.now() - lastLocalChangeTime.current;
       if (timeSinceLocalChange < LOCAL_CHANGE_DEBOUNCE) {
@@ -212,9 +218,10 @@ const App: React.FC = () => {
         return;
       }
 
-      if (newGames && newGames.length > 0) {
+      // Accept Firebase data (even empty arrays - don't keep mock data)
+      if (newGames) {
         isFirebaseUpdate.current = true;
-        setGames(newGames);
+        setGames(newGames.length > 0 ? newGames : []);
         // Also save to localStorage as cache
         saveToStorage(STORAGE_KEYS.GAMES, newGames);
       }
@@ -250,8 +257,11 @@ const App: React.FC = () => {
     // Always save to localStorage
     saveToStorage(STORAGE_KEYS.GAMES, games);
 
-    // If Firebase is configured and this is NOT from a Firebase update, save to Firebase
-    if (useFirebase && !isFirebaseUpdate.current) {
+    // Only save to Firebase if:
+    // 1. Firebase is configured
+    // 2. This is NOT from a Firebase update
+    // 3. We've already received initial data from Firebase (prevent overwriting with mock data)
+    if (useFirebase && !isFirebaseUpdate.current && hasReceivedInitialData.current) {
       // Mark that we're making a local change
       lastLocalChangeTime.current = Date.now();
       saveGames(games);
