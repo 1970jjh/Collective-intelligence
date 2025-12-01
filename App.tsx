@@ -85,8 +85,23 @@ const STORAGE_KEYS = {
   LOGS: 'collective_intelligence_logs',
 };
 
+// --- HELPER: Check if localStorage is available ---
+const isLocalStorageAvailable = (): boolean => {
+  try {
+    const testKey = '__storage_test__';
+    localStorage.setItem(testKey, testKey);
+    localStorage.removeItem(testKey);
+    return true;
+  } catch (e) {
+    return false;
+  }
+};
+
+const storageAvailable = isLocalStorageAvailable();
+
 // --- HELPER: Load from localStorage with fallback ---
 const loadFromStorage = <T,>(key: string, fallback: T): T => {
+  if (!storageAvailable) return fallback;
   try {
     const stored = localStorage.getItem(key);
     if (stored) {
@@ -100,6 +115,7 @@ const loadFromStorage = <T,>(key: string, fallback: T): T => {
 
 // --- HELPER: Save to localStorage ---
 const saveToStorage = <T,>(key: string, data: T): void => {
+  if (!storageAvailable) return;
   try {
     localStorage.setItem(key, JSON.stringify(data));
   } catch (e) {
